@@ -1,0 +1,47 @@
+---
+# Example of a simulated bunch crossing for the LUXE experiment.
+# See Abramowicz et al, EPJST 230, 2445 (2021), arXiv:2102.02032
+
+control:
+  dt_multiplier: 0.5
+  radiation_reaction: true
+  pair_creation: true
+  rng_seed: {{rng_seed|default(0,true)}}
+  increase_pair_rate_by: 1.0e4
+
+laser:
+  a0: a0
+  wavelength: wavelength
+  fwhm_duration: tau * femto
+  waist: 147.839 * sqrt(laser_energy) * wavelength / (a0 * sqrt(tau))
+  polarization: circular
+
+beam:
+  n: {{n|default(100000,true)}}
+  species: electron
+  charge: {{charge|default('default_charge',true)}}
+  gamma: E / (me * c^2)
+  sigma: DE / (me * c^2)
+  radius: [beamsize, normally_distributed]
+  length: {{length|default(24.0e-6,true)}}
+  collision_angle: {{collision_angle|default(-17.2,true)}} * degree
+  rms_divergence: 8.672 * micro
+  offset: {{offset|default([0.0, 0.0, 0.0],true)}}
+
+output:
+  ident: "{{ident|default('00_luxe_default_jinja_100000',true)}}"
+  dump_all_particles: hdf5
+  discard_background_e: true
+  coordinate_system: beam
+  units: hep
+
+constants:
+  a0: 5.0
+  laser_energy: 1.2 # joules
+  wavelength: 0.8 * micro
+  tau: 30.0 # fs
+  beamsize: {{radius|default(5.0e-6,true)}}
+  E: {{E|default(16.5e9,true)}} * eV
+  DE: {{DE|default('0.001 * E',true)}} * eV
+  initial_gamma: 16.5 * GeV / (me * c^2)
+  default_charge: 1.5e9 * e
