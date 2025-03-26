@@ -4,6 +4,7 @@ import h5py as _h5
 import jinja2 as _jj
 import glob as _glob
 import pickle as _pk
+from scipy.optimize import curve_fit
 import os
 
 yml_default_path = "../../00_ptarmigan/pickles/"
@@ -17,7 +18,7 @@ def GeneratePtarmiganFile(tag="luxe_default_jinja", seed=0, ngenerate=10000,
                           offset=[0.0, 0.0, 0.0], radius=5e-6, angle=-17.2, charge=250e-12, E=16.5e9, DE=16.5e6, length=24e-6,
                           yml_path=yml_default_path, templatefilename=template_default_file_name, templatefolder=template_default_path):
     ymlfilename = yml_path + tag + ".yml"
-    paramdict = dict(ident=tag, rng_seed=seed, n=ngenerate, offset=offset, radius=radius, collision_angle=angle,
+    paramdict = dict(ident=tag, rng_seed=seed, n=ngenerate, offset=offset, radius=radius, angle=angle,
                      charge=charge, E=E, DE=DE, length=length)
     env = _jj.Environment(loader=_jj.FileSystemLoader(templatefolder))
     template = env.get_template(templatefilename)
@@ -34,10 +35,10 @@ def RunPtarmiganFile(file, printPtarmigan=False, removeYmlFile=False, mpi=False,
     zsh = "zsh -l -c"
     if mpi:
         if mpi_nb > 8:
-            raise ValueError("Number of cores required '{}' is above 8".format(mpi_nb))
+            raise ValueError("Number of cores requested '{}' is above 8".format(mpi_nb))
         command = "mpirun -n {} ptarmigan ".format(mpi_nb)
     else:
-        command = "ptarmigan".format(mpi_nb)
+        command = "ptarmigan"
     if printPtarmigan:
         out = ""
     else:
@@ -61,30 +62,31 @@ def SetOffset(value, coord='X'):
 def GenerateRunAnalyse(data_dict, tag='luxe_default_GenRunAn', seed=0, ngenerate=10000,
                        offset=[0.0, 0.0, 0.0], radius=5e-6, angle=-17.2, charge=250e-12, E=16.5e9, DE=16.5e6, length=24e-6,
                        yml_path=yml_default_path, templatefilename=template_default_file_name, templatefolder=template_default_path,
-                       printPtarmigan=False, removeYmlFile=False, removeH5File=False, mpi=False, mpi_nb=8):
+                       getEnergyHist=False, printPtarmigan=False, removeYmlFile=False, removeH5File=False, mpi=False, mpi_nb=8):
     ymlfilename = GeneratePtarmiganFile(tag=tag, seed=seed, ngenerate=ngenerate, offset=offset,
                                         radius=radius, angle=angle, charge=charge, E=E, DE=DE, length=length,
                                         yml_path=yml_path, templatefilename=templatefilename, templatefolder=templatefolder)
     RunPtarmiganFile(ymlfilename, printPtarmigan=printPtarmigan, removeYmlFile=removeYmlFile, mpi=mpi, mpi_nb=mpi_nb)
 
-    AnalyseFile(ymlfilename, data_dict, removeH5File=removeH5File)
+    AnalyseFile(ymlfilename, data_dict, removeH5File=removeH5File, getEnergyHist=getEnergyHist)
 
 
-def ScanPositionJitter(tag="luxe_default_position_jitter_scan", ngenerate=10000, coord='X', mu=0, sigma=3e-6, npoints=100,
+def ScanPositionJitter(tag="luxe_default_position_jitter_scan", ngenerate=10000, seedstart=0, coord='X', mu=0, sigma=3e-6, npoints=100,
                        radius=5e-6, angle=-17.2, charge=250e-12, E=16.5e9, DE=16.5e6, length=24e-6,
                        yml_path=yml_default_path, templatefilename=template_default_file_name, templatefolder=template_default_path,
-                       printPtarmigan=False, removeYmlFile=False, removeH5File=False, mpi=False, mpi_nb=8):
+                       getEnergyHist=False, printPtarmigan=False, removeYmlFile=False, removeH5File=False, mpi=False, mpi_nb=8):
     data_dict = {}
     printtag = tag + '_' + coord + '_' + str(ngenerate)
     for seed in range(npoints):
-        fulltag = str(seed).zfill(3) + '_' + tag + '_' + coord + '_' + str(ngenerate)
+        fulltag = str(seed) + '_' + tag + '_' + coord + '_' + str(ngenerate)
         value = _np.random.normal(mu, sigma)
         _printProgressBar(seed, npoints, prefix='Run position jitter scan : {}'.format(printtag), suffix='Complete', length=50)
-        GenerateRunAnalyse(data_dict, tag=fulltag, seed=seed, ngenerate=ngenerate, offset=SetOffset(value, coord),
+        GenerateRunAnalyse(data_dict, tag=fulltag, seed=seed+seedstart, ngenerate=ngenerate, offset=SetOffset(value, coord),
                            radius=radius, angle=angle, charge=charge, E=E, DE=DE, length=length,
                            yml_path=yml_path, templatefilename=templatefilename, templatefolder=templatefolder,
-                           printPtarmigan=printPtarmigan, removeYmlFile=removeYmlFile, removeH5File=removeH5File, mpi=mpi, mpi_nb=mpi_nb)
-    picklefilename = (yml_path + tag + '_' + coord + '_n_' + str(ngenerate) + '_npoints_' + str(npoints) + '_sigma_' + str(sigma))
+                           getEnergyHist=getEnergyHist, printPtarmigan=printPtarmigan,
+                           removeYmlFile=removeYmlFile, removeH5File=removeH5File, mpi=mpi, mpi_nb=mpi_nb)
+    picklefilename = (yml_path + tag + '_' + coord + '_n_' + str(ngenerate) + '_npoints_' + str(npoints) + '_sigma_{:.1e}'.format(sigma))
     WritePicke(data_dict, picklefilename)
     _printProgressBar(npoints, npoints, prefix='Run position jitter scan : {}'.format(printtag), suffix='Complete', length=50)
 
@@ -92,7 +94,7 @@ def ScanPositionJitter(tag="luxe_default_position_jitter_scan", ngenerate=10000,
 def ScanAngleJitter(tag="luxe_default_angle_jitter_scan", ngenerate=10000, mu=-17.2, sigma=6e-5, npoints=100,
                     radius=5e-6, offset=[0.0, 0.0, 0.0], charge=250e-12, E=16.5e9, DE=16.5e6, length=24e-6,
                     yml_path=yml_default_path, templatefilename=template_default_file_name, templatefolder=template_default_path,
-                    printPtarmigan=False, removeYmlFile=False, removeH5File=False, mpi=False, mpi_nb=8):
+                    getEnergyHist=False, printPtarmigan=False, removeYmlFile=False, removeH5File=False, mpi=False, mpi_nb=8):
     data_dict = {}
     printtag = tag + '_' + str(ngenerate)
     for seed in range(npoints):
@@ -102,32 +104,34 @@ def ScanAngleJitter(tag="luxe_default_angle_jitter_scan", ngenerate=10000, mu=-1
         GenerateRunAnalyse(data_dict, tag=fulltag, seed=seed, ngenerate=ngenerate, offset=offset,
                            radius=radius, angle=angle, charge=charge, E=E, DE=DE, length=length,
                            yml_path=yml_path, templatefilename=templatefilename, templatefolder=templatefolder,
-                           printPtarmigan=printPtarmigan, removeYmlFile=removeYmlFile, removeH5File=removeH5File, mpi=mpi, mpi_nb=mpi_nb)
-    picklefilename = (yml_path + tag + '_n_' + str(ngenerate) + '_npoints_' + str(npoints) + '_sigma_' + str(sigma))
+                           getEnergyHist=getEnergyHist, printPtarmigan=printPtarmigan,
+                           removeYmlFile=removeYmlFile, removeH5File=removeH5File, mpi=mpi, mpi_nb=mpi_nb)
+    picklefilename = (yml_path + tag + '_n_' + str(ngenerate) + '_npoints_' + str(npoints) + '_sigma_{:.1e}'.format(sigma))
     WritePicke(data_dict, picklefilename)
     _printProgressBar(npoints, npoints, prefix='Run angle jitter scan : {}'.format(printtag), suffix='Complete', length=50)
 
 
 def ScanEnergyJitter(tag="luxe_default_energy_jitter_scan", ngenerate=10000, mu=0, sigma=1e-6, npoints=100,
                      yml_path=yml_default_path, templatefilename=template_default_file_name, templatefolder=template_default_path,
-                     printPtarmigan=False, removeYmlFile=False, removeH5File=False, mpi=False, mpi_nb=8):
+                     getEnergyHist=False, printPtarmigan=False, removeYmlFile=False, removeH5File=False, mpi=False, mpi_nb=8):
     data_dict = {}
     printtag = tag + '_' + str(ngenerate)
     for seed in range(npoints):
         fulltag = str(seed).zfill(3) + '_' + tag + '_' + str(ngenerate)
-        DE = _np.random.normal(mu, sigma)
+        energy = _np.random.normal(mu, sigma)
         _printProgressBar(seed, npoints, prefix='Run energy jitter scan : {}'.format(printtag), suffix='Complete', length=50)
-        GenerateRunAnalyse(data_dict, tag=fulltag, seed=seed, ngenerate=ngenerate, DE=DE,
+        GenerateRunAnalyse(data_dict, tag=fulltag, seed=seed, ngenerate=ngenerate, E=energy,
                            yml_path=yml_path, templatefilename=templatefilename, templatefolder=templatefolder,
-                           printPtarmigan=printPtarmigan, removeYmlFile=removeYmlFile, removeH5File=removeH5File, mpi=mpi, mpi_nb=mpi_nb)
-    picklefilename = (yml_path + tag + '_n_' + str(ngenerate) + '_npoints_' + str(npoints) + '_sigma_' + str(sigma))
+                           getEnergyHist=getEnergyHist, printPtarmigan=printPtarmigan,
+                           removeYmlFile=removeYmlFile, removeH5File=removeH5File, mpi=mpi, mpi_nb=mpi_nb)
+    picklefilename = (yml_path + tag + '_n_' + str(ngenerate) + '_npoints_' + str(npoints) + '_sigma_{:.1e}'.format(sigma))
     WritePicke(data_dict, picklefilename)
     _printProgressBar(npoints, npoints, prefix='Run energy jitter scan : {}'.format(printtag), suffix='Complete', length=50)
 
 
 def ScanChargeJitter(tag="luxe_default_charge_jitter_scan", ngenerate=10000, mu=250e-12, sigma=1e-12, npoints=100,
                      yml_path=yml_default_path, templatefilename=template_default_file_name, templatefolder=template_default_path,
-                     printPtarmigan=False, removeYmlFile=False, removeH5File=False, mpi=False, mpi_nb=8):
+                     getEnergyHist=False, printPtarmigan=False, removeYmlFile=False, removeH5File=False, mpi=False, mpi_nb=8):
     data_dict = {}
     printtag = tag + '_' + str(ngenerate)
     for seed in range(npoints):
@@ -136,15 +140,16 @@ def ScanChargeJitter(tag="luxe_default_charge_jitter_scan", ngenerate=10000, mu=
         _printProgressBar(seed, npoints, prefix='Run charge jitter scan : {}'.format(printtag), suffix='Complete', length=50)
         GenerateRunAnalyse(data_dict, tag=fulltag, seed=seed, ngenerate=ngenerate, charge=charge,
                            yml_path=yml_path, templatefilename=templatefilename, templatefolder=templatefolder,
-                           printPtarmigan=printPtarmigan, removeYmlFile=removeYmlFile, removeH5File=removeH5File, mpi=mpi, mpi_nb=mpi_nb)
-    picklefilename = (yml_path + tag + '_n_' + str(ngenerate) + '_npoints_' + str(npoints) + '_sigma_' + str(sigma))
+                           getEnergyHist=getEnergyHist, printPtarmigan=printPtarmigan,
+                           removeYmlFile=removeYmlFile, removeH5File=removeH5File, mpi=mpi, mpi_nb=mpi_nb)
+    picklefilename = (yml_path + tag + '_n_' + str(ngenerate) + '_npoints_' + str(npoints) + '_sigma_{:.1e}'.format(sigma))
     WritePicke(data_dict, picklefilename)
     _printProgressBar(npoints, npoints, prefix='Run charge jitter scan : {}'.format(printtag), suffix='Complete', length=50)
 
 
 def ScanLengthJitter(tag="luxe_default_length_jitter_scan", ngenerate=10000, mu=40e-15, sigma=3e-15, npoints=100,
                      yml_path=yml_default_path, templatefilename=template_default_file_name, templatefolder=template_default_path,
-                     printPtarmigan=False, removeYmlFile=False, removeH5File=False, mpi=False, mpi_nb=8):
+                     getEnergyHist=False, printPtarmigan=False, removeYmlFile=False, removeH5File=False, mpi=False, mpi_nb=8):
     data_dict = {}
     printtag = tag + '_' + str(ngenerate)
     for seed in range(npoints):
@@ -153,15 +158,16 @@ def ScanLengthJitter(tag="luxe_default_length_jitter_scan", ngenerate=10000, mu=
         _printProgressBar(seed, npoints, prefix='Run length jitter scan : {}'.format(printtag), suffix='Complete', length=50)
         GenerateRunAnalyse(data_dict, tag=fulltag, seed=seed, ngenerate=ngenerate, length=length,
                            yml_path=yml_path, templatefilename=templatefilename, templatefolder=templatefolder,
-                           printPtarmigan=printPtarmigan, removeYmlFile=removeYmlFile, removeH5File=removeH5File, mpi=mpi, mpi_nb=mpi_nb)
-    picklefilename = (yml_path + tag + '_n_' + str(ngenerate) + '_npoints_' + str(npoints) + '_sigma_' + str(sigma))
+                           getEnergyHist=getEnergyHist, printPtarmigan=printPtarmigan,
+                           removeYmlFile=removeYmlFile, removeH5File=removeH5File, mpi=mpi, mpi_nb=mpi_nb)
+    picklefilename = (yml_path + tag + '_n_' + str(ngenerate) + '_npoints_' + str(npoints) + '_sigma_{:.1e}'.format(sigma))
     WritePicke(data_dict, picklefilename)
     _printProgressBar(npoints, npoints, prefix='Run length jitter scan : {}'.format(printtag), suffix='Complete', length=50)
 
 
 def ScanSizeJitter(tag="luxe_default_size_jitter_scan", ngenerate=10000, mu=5e-6, sigma=1e-6, npoints=100,
-                     yml_path=yml_default_path, templatefilename=template_default_file_name, templatefolder=template_default_path,
-                     printPtarmigan=False, removeYmlFile=False, removeH5File=False, mpi=False, mpi_nb=8):
+                   yml_path=yml_default_path, templatefilename=template_default_file_name, templatefolder=template_default_path,
+                   getEnergyHist=False, printPtarmigan=False, removeYmlFile=False, removeH5File=False, mpi=False, mpi_nb=8):
     data_dict = {}
     printtag = tag + '_' + str(ngenerate)
     for seed in range(npoints):
@@ -170,8 +176,9 @@ def ScanSizeJitter(tag="luxe_default_size_jitter_scan", ngenerate=10000, mu=5e-6
         _printProgressBar(seed, npoints, prefix='Run size jitter scan : {}'.format(printtag), suffix='Complete', length=50)
         GenerateRunAnalyse(data_dict, tag=fulltag, seed=seed, ngenerate=ngenerate, radius=size,
                            yml_path=yml_path, templatefilename=templatefilename, templatefolder=templatefolder,
-                           printPtarmigan=printPtarmigan, removeYmlFile=removeYmlFile, removeH5File=removeH5File, mpi=mpi, mpi_nb=mpi_nb)
-    picklefilename = (yml_path + tag + '_n_' + str(ngenerate) + '_npoints_' + str(npoints) + '_sigma_' + str(sigma))
+                           getEnergyHist=getEnergyHist, printPtarmigan=printPtarmigan,
+                           removeYmlFile=removeYmlFile, removeH5File=removeH5File, mpi=mpi, mpi_nb=mpi_nb)
+    picklefilename = (yml_path + tag + '_n_' + str(ngenerate) + '_npoints_' + str(npoints) + '_sigma_{:.1e}'.format(sigma))
     WritePicke(data_dict, picklefilename)
     _printProgressBar(npoints, npoints, prefix='Run size jitter scan : {}'.format(printtag), suffix='Complete', length=50)
 
@@ -269,49 +276,75 @@ def getNumberParticles(file, part=None):
     return momentum[:, 0].size
 
 
-def getNumberParticlesWeight(file, part=None):
+def getNumberParticlesWeighted(file, part=None):
     weight = getOutput(file, part=part, param='weight')
     return weight.sum()
 
 
-def fillDataDict(data_dict, file):
+def getEnergy(file, part=None):
+    momentum = getOutput(file, part=part, param='momentum')
+    return momentum[:, 0]
+
+
+def fillDataDict(data_dict, file, getEnergyHist=False):
     offsets, offset_unit = getAllBeamOffset(file, returnUnit=True)
-    radius, radius_unit = getBeamRadius(file, returnUnit=True)
-    angle, angle_unit = getBeamAngle(file, returnUnit=True)
-    charge, charge_unit = getBeamCharge(file, returnUnit=True)
-    length, length_unit = getBeamLength(file, returnUnit=True)
+    radius,  radius_unit = getBeamRadius(file,    returnUnit=True)
+    angle,   angle_unit  = getBeamAngle(file,     returnUnit=True)
+    charge,  charge_unit = getBeamCharge(file,    returnUnit=True)
+    length,  length_unit = getBeamLength(file,    returnUnit=True)
+    energy,  energy_unit = getBeamEnergy(file,    returnUnit=True)
+
     data_dict["offset_unit"] = offset_unit
     data_dict["radius_unit"] = radius_unit
-    data_dict["angle_unit"]  = angle_unit
+    data_dict["angle_unit"] = angle_unit
     data_dict["charge_unit"] = charge_unit
     data_dict["length_unit"] = length_unit
+    data_dict["energy_unit"] = energy_unit
+
     try:
-        data_dict["OffsetX"].append(offsets[0])
-        data_dict["OffsetY"].append(offsets[1])
-        data_dict["OffsetZ"].append(offsets[2])
-        data_dict["Radius"].append(radius)
-        data_dict["Angle"].append(angle)
-        data_dict["Charge"].append(charge)
-        data_dict["Length"].append(length)
-        data_dict["Nbelectron"].append(getNumberParticlesWeight(file, part='electron'))
-        data_dict["Nbphoton"].append(getNumberParticlesWeight(file, part='photon'))
-        data_dict["Nbpositron"].append(getNumberParticlesWeight(file, part='positron'))
+        data_dict["BeamOffsetX"].append(offsets[0])
+        data_dict["BeamOffsetY"].append(offsets[1])
+        data_dict["BeamOffsetZ"].append(offsets[2])
+        data_dict["BeamRadius"].append(radius)
+        data_dict["BeamAngle"].append(angle)
+        data_dict["BeamCharge"].append(charge)
+        data_dict["BeamLength"].append(length)
+        data_dict["BeamEnergy"].append(energy)
+
+        data_dict["electron"]["Nbparticle"].append(getNumberParticlesWeighted(file, part='electron'))
+        data_dict["photon"]["Nbparticle"].append(getNumberParticlesWeighted(file, part='photon'))
+        data_dict["positron"]["Nbparticle"].append(getNumberParticlesWeighted(file, part='positron'))
+        if getEnergyHist:
+            data_dict["electron"]["Energy"].append(getEnergy(file, part='electron').tolist())
+            data_dict["photon"]["Energy"].append(getEnergy(file, part='photon').tolist())
+            data_dict["positron"]["Energy"].append(getEnergy(file, part='positron').tolist())
+
     except KeyError:
-        data_dict["OffsetX"]    = [offsets[0]]
-        data_dict["OffsetY"]    = [offsets[1]]
-        data_dict["OffsetZ"]    = [offsets[2]]
-        data_dict["Radius"]     = [radius]
-        data_dict["Angle"]      = [angle]
-        data_dict["Charge"]     = [charge]
-        data_dict["Length"]     = [length]
-        data_dict["Nbelectron"] = [getNumberParticlesWeight(file, part='electron')]
-        data_dict["Nbphoton"]   = [getNumberParticlesWeight(file, part='photon')]
-        data_dict["Nbpositron"] = [getNumberParticlesWeight(file, part='positron')]
+        data_dict["BeamOffsetX"] = [offsets[0]]
+        data_dict["BeamOffsetY"] = [offsets[1]]
+        data_dict["BeamOffsetZ"] = [offsets[2]]
+        data_dict["BeamRadius"] = [radius]
+        data_dict["BeamAngle"] = [angle]
+        data_dict["BeamCharge"] = [charge]
+        data_dict["BeamLength"] = [length]
+        data_dict["BeamEnergy"] = [energy]
+
+        data_dict["electron"] = {}
+        data_dict["photon"] = {}
+        data_dict["positron"] = {}
+
+        data_dict["electron"]["Nbparticle"] = [getNumberParticlesWeighted(file, part='electron')]
+        data_dict["photon"]["Nbparticle"] = [getNumberParticlesWeighted(file, part='photon')]
+        data_dict["positron"]["Nbparticle"] = [getNumberParticlesWeighted(file, part='positron')]
+        if getEnergyHist:
+            data_dict["electron"]["Energy"] = [getEnergy(file, part='electron').tolist()]
+            data_dict["photon"]["Energy"] = [getEnergy(file, part='photon').tolist()]
+            data_dict["positron"]["Energy"] = [getEnergy(file, part='positron').tolist()]
 
 
-def AnalyseFile(ymlfilename, data_dict, removeH5File=False):
+def AnalyseFile(ymlfilename, data_dict, removeH5File=False, getEnergyHist=False):
     h5filename = _glob.glob('{}*'.format(".." + ymlfilename.strip(".yml")))[0]
-    fillDataDict(data_dict, h5filename)
+    fillDataDict(data_dict, h5filename, getEnergyHist=getEnergyHist)
     if removeH5File:
         os.system("rm {}".format(h5filename))
 
@@ -423,10 +456,23 @@ def plotMultipleHist(inputfilename, X=['Nbphoton'], nbins=20, figsize=[8, 5]):
     _plt.legend()
 
 
+def plotAllHist(inputfilename, param='Energy', unit='GeV', nbins=20, figsize=[8, 5]):
+    data_dict = ReadPicke(inputfilename)
+
+    _plt.rcParams['font.size'] = 15
+    _plt.figure(figsize=figsize)
+    _plt.hist(sum(data_dict['photon'][param], []), histtype='step', bins=nbins, label="Photons")
+    _plt.hist(sum(data_dict['positron'][param], []), histtype='step', bins=nbins, label="Positrons")
+    _plt.hist(sum(data_dict['electron'][param], []), histtype='step', bins=nbins, label="Electrons")
+    _plt.xlabel("{} [{}]".format(param, unit))
+    _plt.ticklabel_format(axis="both", style='sci', scilimits=(0, 0))
+    _plt.legend()
+
+
 def plotCumulativeLength(inputfilename, X='Nbphoton', nbins=30, value=0.68, cumulative=True):
     data_dict = ReadPicke(inputfilename)
     upper_cl, lower_cl, mode = calcCumulativeLength(data_dict[X])
-    variation = calcVariation(lower_cl, upper_cl, mode)
+    variation = calcVariation(upper_cl, lower_cl, mode)
 
     _plt.hist(data_dict[X], bins=nbins, histtype='step', label="Signal {}".format(X))
     if cumulative:
@@ -447,6 +493,106 @@ def plotAllParticlesCL(inputfilename, nbins=30, value=0.68, cumulative=True, fig
     plotCumulativeLength(inputfilename, X='Nbpositron', nbins=nbins, value=value, cumulative=cumulative)
     _plt.subplot(1, 3, 3)
     plotCumulativeLength(inputfilename, X='Nbelectron', nbins=nbins, value=value, cumulative=cumulative)
+
+
+def plotResolutionOnResolution(regex, nbins=30, value=0.68, figsize=[8, 5], fitparam=[1e10, 1]):
+    filenames = _glob.glob(regex)
+    if not filenames:
+        raise IOError("No files found with regex : {}".format(regex))
+    Var_BPM = []
+    Var_IP_Photon = []
+    Var_IP_Positron = []
+    for filename in filenames:
+        Var_BPM.append(float(filename.strip('.pickle').split('_')[-1]))
+
+        data_dict = ReadPicke(filename)
+        upper_cl_photon, lower_cl_photon, mode_photon = calcCumulativeLength(data_dict['Nbphoton'], nbins=nbins, value=value)
+        upper_cl_positron, lower_cl_positron, mode_positron = calcCumulativeLength(data_dict['Nbpositron'], nbins=nbins, value=value)
+        Var_IP_Photon.append(calcVariation(upper_cl_photon, lower_cl_photon, mode_photon))
+        Var_IP_Positron.append(calcVariation(upper_cl_positron, lower_cl_positron, mode_positron))
+
+    def hyper(x, a, c):
+        return _np.sqrt(pow(a, 2) * pow(x, 2) + pow(c, 2))
+
+    def poly(x, a, c):
+        return a * pow(x, 2) + c
+
+    _plt.rcParams['font.size'] = 15
+    fig, ax1 = _plt.subplots(figsize=figsize)
+    ax2 = ax1.twinx()
+
+    params, covariance = curve_fit(poly, Var_BPM, Var_IP_Photon, p0=fitparam)
+    a_fit, c_fit = params
+    x_fit = _np.linspace(min(Var_BPM), max(Var_BPM), 100)
+    y_fit = poly(x_fit, a_fit, c_fit)
+    line0, = ax1.plot(x_fit, y_fit, label="Polynomial fit", color='C0')
+
+    line1, = ax1.plot(Var_BPM, Var_IP_Photon, ls='', marker='+', markersize=12, color='C0', label='Photons')
+    ax1.set_ylabel(r"$\sigma_{Photons}$ [%]", color='C0')
+    ax1.set_xlabel(r"$\sigma_{Jitter}$ [m]")
+
+    line2, = ax2.plot(Var_BPM, Var_IP_Positron, ls='', marker='x', markersize=12, color='C1', label='Positrons')
+    ax2.set_ylabel(r"$\sigma_{Positrons}$ [%]", color='C1')
+
+    _plt.ticklabel_format(axis="x", style='sci', scilimits=(0, 0))
+    lines = [line0, line1, line2]
+    labels = [line.get_label() for line in lines]
+    ax1.legend(lines, labels)
+    fig.tight_layout()
+
+
+def getSignalJitterArray(filenames, part='photon', nbins=30, value=0.68):
+    Var_BPM = []
+    Var_IP  = []
+    for filename in filenames:
+        Var_BPM.append(float(filename.strip('.pickle').split('_')[-1]))
+
+        data_dict = ReadPicke(filename)
+        upper_cl, lower_cl, mode = calcCumulativeLength(data_dict[part]['Nbparticle'], nbins=nbins, value=value)
+        Var_IP.append(calcVariation(upper_cl, lower_cl, mode))
+
+    return Var_BPM, Var_IP
+
+
+def fitJitter(func, Var_BPM, Var_IP, fitparam=[]):
+    params, covariance = curve_fit(func, Var_BPM, Var_IP, p0=fitparam)
+    a_fit, c_fit = params
+    x_fit = _np.linspace(min(Var_BPM), max(Var_BPM), 100)
+    y_fit = func(x_fit, a_fit, c_fit)
+    return x_fit, y_fit
+
+
+def plotXYResolutionOnResolution(regex_x, regex_y, part='photon', nbins=30, value=0.68, figsize=[8, 5], fitparam=[1e10, 1]):
+    filenames_x = _glob.glob(regex_x)
+    filenames_y = _glob.glob(regex_y)
+    if not filenames_x:
+        raise IOError("No files found with regex")
+
+    Var_BPM_X, Var_IP_X = getSignalJitterArray(filenames_x, part=part, nbins=nbins, value=value)
+    Var_BPM_Y, Var_IP_Y = getSignalJitterArray(filenames_y, part=part, nbins=nbins, value=value)
+
+    def hyper(x, a, c):
+        return _np.sqrt(pow(a, 2) * pow(x, 2) + pow(c, 2))
+
+    def poly(x, a, c):
+        return a * pow(x, 2) + c
+
+    _plt.rcParams['font.size'] = 15
+    _plt.figure(figsize=figsize)
+
+    JitterX_fit_x, JitterX_fit_y = fitJitter(poly, Var_BPM_X, Var_IP_X, fitparam=fitparam)
+    _plt.plot(JitterX_fit_x, JitterX_fit_y, label="Polynomial fit", color='C0')
+
+    JitterY_fit_x, JitterY_fit_y = fitJitter(poly, Var_BPM_Y, Var_IP_Y, fitparam=fitparam)
+    _plt.plot(JitterY_fit_x, JitterY_fit_y, label="Polynomial fit", color='C1')
+
+    _plt.plot(Var_BPM_X, Var_IP_X, ls='', marker='+', markersize=12, color='C0', label='X')
+    _plt.plot(Var_BPM_Y, Var_IP_Y, ls='', marker='+', markersize=12, color='C1', label='Y')
+
+    _plt.ylabel(r"$\sigma_{Photons}$ [%]")
+    _plt.xlabel(r"$\sigma_{Jitter}$ [m]")
+    _plt.ticklabel_format(axis="x", style='sci', scilimits=(0, 0))
+    _plt.legend()
 
 # ============ TOOLS ================ #
 
