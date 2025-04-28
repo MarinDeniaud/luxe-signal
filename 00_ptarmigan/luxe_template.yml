@@ -8,7 +8,7 @@ control:
   pair_creation: true
   rng_seed: {{ seed|default(0) }}
   increase_pair_rate_by: {{ pair_rate|default(1.0e4) }} # 1e4
-  lcfa: true
+  lcfa: false
 
 laser:
   a0: {{ a0|default(5.0) }} # 5
