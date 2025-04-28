@@ -427,14 +427,14 @@ def plotAllHist(inputfilename, param='Energy', unit='GeV', nbins=20, figsize=[8,
     _plt.legend()
 
 
-def plotCumulativeLength(inputfilename, X='Nbphoton', nbins=30, value=0.68, cumulative=True):
+def plotCumulativeLength(inputfilename, X='photon', nbins=30, value=0.68, cumulative=True):
     data_dict = ReadPicke(inputfilename)
-    upper_cl, lower_cl, mode = calcCumulativeLength(data_dict[X])
+    upper_cl, lower_cl, mode = calcCumulativeLength(data_dict[X]['Nbparticle'])
     variation = calcVariation(upper_cl, lower_cl, mode)
 
-    _plt.hist(data_dict[X], bins=nbins, histtype='step', label="Signal {}".format(X))
+    _plt.hist(data_dict[X]['Nbparticle'], bins=nbins, histtype='step', label="Signal {}".format(X))
     if cumulative:
-        _plt.hist(data_dict[X], bins=nbins, histtype='step', color='k', alpha=0.3, cumulative=True, label="Cumulative")
+        _plt.hist(data_dict[X]['Nbparticle'], bins=nbins, histtype='step', color='k', alpha=0.3, cumulative=True, label="Cumulative")
 
     _plt.xlabel(X)
     _plt.axvline(upper_cl, ls='--', color='k', alpha=0.3, label="CL at {} : {:.2f} %".format(value, variation))
@@ -446,11 +446,11 @@ def plotAllParticlesCL(inputfilename, nbins=30, value=0.68, cumulative=True, fig
     _plt.rcParams['font.size'] = 15
     _plt.figure(figsize=figsize)
     _plt.subplot(1, 3, 1)
-    plotCumulativeLength(inputfilename, X='Nbphoton', nbins=nbins, value=value, cumulative=cumulative)
+    plotCumulativeLength(inputfilename, X='photon', nbins=nbins, value=value, cumulative=cumulative)
     _plt.subplot(1, 3, 2)
-    plotCumulativeLength(inputfilename, X='Nbpositron', nbins=nbins, value=value, cumulative=cumulative)
+    plotCumulativeLength(inputfilename, X='positron', nbins=nbins, value=value, cumulative=cumulative)
     _plt.subplot(1, 3, 3)
-    plotCumulativeLength(inputfilename, X='Nbelectron', nbins=nbins, value=value, cumulative=cumulative)
+    plotCumulativeLength(inputfilename, X='electron', nbins=nbins, value=value, cumulative=cumulative)
 
 
 def plotResolutionOnResolution(regex, nbins=30, value=0.68, figsize=[8, 5], fitparam=[1e10, 1]):
