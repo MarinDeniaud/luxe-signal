@@ -3,6 +3,7 @@ import matplotlib.pyplot as _plt
 import h5py as _h5
 import jinja2 as _jj
 import glob as _glob
+import pandas as _pd
 import pickle as _pk
 from scipy.optimize import curve_fit
 import os
@@ -62,6 +63,19 @@ def GenerateRunAnalyse(data_dict,
     ymlfilename = GeneratePtarmiganFile(**arg)
     RunPtarmiganFile(ymlfilename, printPtarmigan=printPtarmigan, removeYmlFile=removeYmlFile, mpi=mpi, mpi_nb=mpi_nb)
     AnalyseFile(ymlfilename, data_dict, removeH5File=removeH5File, getEnergyHist=getEnergyHist)
+
+
+def ScanNoJitter(tag="luxe_default_no_jitter_scan", ngenerate=10000, npoints=1000,
+                 yml_path=yml_default_path, removeYmlFile=True, removeH5File=True, **arg):
+    data_dict = {}
+    printtag = "{}_ngen_{}_npts_{}".format(tag, ngenerate, npoints)
+    for seed in range(npoints):
+        fulltag = "{}_{}".format(seed, printtag)
+        _printProgressBar(seed, npoints, prefix='Run no jitter scan : {}'.format(printtag), suffix='Complete', length=50)
+        GenerateRunAnalyse(data_dict, tag=fulltag, seed=seed, ngenerate=ngenerate,
+                           yml_path=yml_path, removeYmlFile=removeYmlFile, removeH5File=removeH5File, **arg)
+    WritePicke(data_dict, "{}{}".format(yml_path, printtag))
+    _printProgressBar(npoints, npoints, prefix='Run no jitter scan : {}'.format(printtag), suffix='Complete', length=50)
 
 
 def ScanPositionJitter(tag="luxe_default_position_jitter_scan", ngenerate=10000, coord='X', mu=0, sigma=3e-6, npoints=1000,
@@ -178,6 +192,23 @@ def ScanRadiusOffset(tag="luxe_default_radius_offset_scan", seed=0, ngenerate=10
 # ============ ANALYSE FILES ================ #
 
 
+def getLaserParam(file, param=None, returnUnit=False):
+    data = _h5.File(file, 'r')
+    if param is not None:
+        value = data['config/laser/'+param][()]
+        unit = data['config/laser/'+param].attrs['unit'].decode('utf-8')
+    else:
+        raise ValueError("Must specify 'param' parameter")
+    data.close()
+    if returnUnit:
+        return value, unit
+    return value
+
+
+def getLaserA0(file, returnUnit=False):
+    return getLaserParam(file, param='a0', returnUnit=returnUnit)
+
+
 def getBeamParam(file, param=None, returnUnit=False):
     data = _h5.File(file, 'r')
     if param is not None:
@@ -209,6 +240,11 @@ def getBeamCharge(file, returnUnit=False):
 
 def getBeamEnergy(file, returnUnit=False):
     return getBeamParam(file, param='gamma', returnUnit=returnUnit)
+
+
+def getBeamEnergyEV(file):
+    E = getBeamParam(file, param='gamma', returnUnit=False)
+    return E *  (9.1093837e-31 * 299792458 ** 2) / 1.602177e-19
 
 
 def getBeamDE(file, returnUnit=False):
@@ -345,6 +381,58 @@ def ReadPicke(inputfilename):
     return data_dict
 
 # ============ PLOTS ================ #
+
+
+def plotEnergyCurvesforEachA0(regex, part='photon'):
+    filenames = _glob.glob(regex)
+    Npart = []
+    a0 = []
+    E = []
+    for filename in filenames:
+        Npart.append(getNumberParticlesWeighted(filename, part=part))
+        a0.append(getLaserA0(filename))
+        E.append(getBeamEnergyEV(filename))
+    df = _pd.DataFrame(_np.array([Npart, a0, E]).transpose(), columns=['Npart', 'a0', 'E'])
+    for a0 in _np.sort(df.a0.unique()):
+        df_reduced = df[df.a0 == a0]
+        df_reduced = df_reduced.sort_values(by='E')
+        _plt.plot(df_reduced.E.values, df_reduced.Npart.values, ls='', marker='+', markersize=12,
+                  label="a0={}".format(a0))
+    _plt.ylabel('Number of {}'.format(part))
+    _plt.xlabel("Energy (eV)")
+    _plt.legend()
+
+
+def plotA0CurvesforEachEnergy(regex, part='photon'):
+    filenames = _glob.glob(regex)
+    Npart = []
+    a0 = []
+    E = []
+    for filename in filenames:
+        Npart.append(getNumberParticlesWeighted(filename, part=part))
+        a0.append(getLaserA0(filename))
+        E.append(getBeamEnergyEV(filename))
+    df = _pd.DataFrame(_np.array([Npart, a0, E]).transpose(), columns=['Npart', 'a0', 'E'])
+    for energy in _np.sort(df.E.unique()):
+        df_reduced = df[df.E == energy]
+        df_reduced = df_reduced.sort_values(by='a0')
+        _plt.plot(df_reduced.a0.values, df_reduced.Npart.values, ls='', marker='+', markersize=12,
+                  label="{:.2e} eV".format(energy))
+    _plt.ylabel('Number of {}'.format(part))
+    _plt.xlabel("a0")
+    _plt.legend()
+
+
+def plotAllA0EnergyCurves(regex, figsize=[13, 5]):
+    _plt.rcParams['font.size'] = 15
+    fig = _plt.figure(figsize=figsize)
+    _plt.subplot(1, 3, 1)
+    plotA0CurvesforEachEnergy(regex, part='photon')
+    _plt.subplot(1, 3, 2)
+    plotA0CurvesforEachEnergy(regex, part='positron')
+    _plt.subplot(1, 3, 3)
+    plotA0CurvesforEachEnergy(regex, part='electron')
+    fig.tight_layout()
 
 
 def plotCompare(file1, file2, part='photon', param='E'):
