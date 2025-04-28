@@ -640,6 +640,27 @@ def plotXYResolutionOnResolution(regex_x, regex_y, part='photon', nbins=30, valu
     _plt.ticklabel_format(axis="x", style='sci', scilimits=(0, 0))
     _plt.legend()
 
+
+def plotAllResOnRes(regex_x, regex_y=None, nbins=30, value=0.68, labelX="X", labelY="Y", labelXY="X/Y", unit='m',
+                    fit=False, fitparams=[[1e10, 1], [1e10, 1], [1e10, 1]],
+                    mark_x=None, mark_y=None, figsize=[13, 5]):
+    _plt.rcParams['font.size'] = 15
+    fig = _plt.figure(figsize=figsize)
+
+    _plt.subplot(1, 3, 1)
+    plotXYResolutionOnResolution(regex_x, regex_y, labelX=labelX, labelY=labelY, labelXY=labelXY, unit=unit,
+                                 part='photon', nbins=nbins, value=value,
+                                 fit=fit, fitparam=fitparams[0], mark_x=mark_x, mark_y=mark_y)
+    _plt.subplot(1, 3, 2)
+    plotXYResolutionOnResolution(regex_x, regex_y, labelX=labelX, labelY=labelY, labelXY=labelXY, unit=unit,
+                                 part='positron', nbins=nbins, value=value,
+                                 fit=fit, fitparam=fitparams[1], mark_x=mark_x, mark_y=mark_y)
+    _plt.subplot(1, 3, 3)
+    plotXYResolutionOnResolution(regex_x, regex_y, labelX=labelX, labelY=labelY, labelXY=labelXY, unit=unit,
+                                 part='electron', nbins=nbins, value=value,
+                                 fit=fit, fitparam=fitparams[2], mark_x=mark_x, mark_y=mark_y)
+    fig.tight_layout()
+
 # ============ TOOLS ================ #
 
 
