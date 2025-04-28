@@ -14,12 +14,10 @@ template_default_file_name = "luxe_template.yml"
 # ============ GENERATE FILES ================ #
 
 
-def GeneratePtarmiganFile(tag="luxe_default_jinja", seed=0, ngenerate=10000,
-                          offset=[0.0, 0.0, 0.0], radius=5e-6, angle=-17.2, charge=250e-12, E=16.5e9, DE=16.5e6, length=24e-6,
-                          yml_path=yml_default_path, templatefilename=template_default_file_name, templatefolder=template_default_path):
+def GeneratePtarmiganFile(tag="000_luxe_default_jinja_10000", yml_path=yml_default_path,
+                          templatefilename=template_default_file_name, templatefolder=template_default_path, **arg):
     ymlfilename = yml_path + tag + ".yml"
-    paramdict = dict(ident=tag, rng_seed=seed, n=ngenerate, offset=offset, radius=radius, angle=angle,
-                     charge=charge, E=E, DE=DE, length=length)
+    paramdict = dict(tag=tag, **arg)
     env = _jj.Environment(loader=_jj.FileSystemLoader(templatefolder))
     template = env.get_template(templatefilename)
     f = open(ymlfilename, 'w')
@@ -59,61 +57,45 @@ def SetOffset(value, coord='X'):
         raise ValueError("Unknown coordinate '{}'".format(coord))
 
 
-def GenerateRunAnalyse(data_dict, tag='luxe_default_GenRunAn', seed=0, ngenerate=10000,
-                       offset=[0.0, 0.0, 0.0], radius=5e-6, angle=-17.2, charge=250e-12, E=16.5e9, DE=16.5e6, length=24e-6,
-                       yml_path=yml_default_path, templatefilename=template_default_file_name, templatefolder=template_default_path,
-                       getEnergyHist=False, printPtarmigan=False, removeYmlFile=False, removeH5File=False, mpi=False, mpi_nb=8):
-    ymlfilename = GeneratePtarmiganFile(tag=tag, seed=seed, ngenerate=ngenerate, offset=offset,
-                                        radius=radius, angle=angle, charge=charge, E=E, DE=DE, length=length,
-                                        yml_path=yml_path, templatefilename=templatefilename, templatefolder=templatefolder)
+def GenerateRunAnalyse(data_dict,
+                       getEnergyHist=False, printPtarmigan=False, removeYmlFile=False, removeH5File=False, mpi=False, mpi_nb=8, **arg):
+    ymlfilename = GeneratePtarmiganFile(**arg)
     RunPtarmiganFile(ymlfilename, printPtarmigan=printPtarmigan, removeYmlFile=removeYmlFile, mpi=mpi, mpi_nb=mpi_nb)
-
     AnalyseFile(ymlfilename, data_dict, removeH5File=removeH5File, getEnergyHist=getEnergyHist)
 
 
-def ScanPositionJitter(tag="luxe_default_position_jitter_scan", ngenerate=10000, seedstart=0, coord='X', mu=0, sigma=3e-6, npoints=100,
-                       radius=5e-6, angle=-17.2, charge=250e-12, E=16.5e9, DE=16.5e6, length=24e-6,
-                       yml_path=yml_default_path, templatefilename=template_default_file_name, templatefolder=template_default_path,
-                       getEnergyHist=False, printPtarmigan=False, removeYmlFile=False, removeH5File=False, mpi=False, mpi_nb=8):
+def ScanPositionJitter(tag="luxe_default_position_jitter_scan", ngenerate=10000, coord='X', mu=0, sigma=3e-6, npoints=1000,
+                       yml_path=yml_default_path, removeYmlFile=True, removeH5File=True, **arg):
     data_dict = {}
     printtag = tag + '_' + coord + '_' + str(ngenerate)
     for seed in range(npoints):
         fulltag = str(seed) + '_' + tag + '_' + coord + '_' + str(ngenerate)
         value = _np.random.normal(mu, sigma)
         _printProgressBar(seed, npoints, prefix='Run position jitter scan : {}'.format(printtag), suffix='Complete', length=50)
-        GenerateRunAnalyse(data_dict, tag=fulltag, seed=seed+seedstart, ngenerate=ngenerate, offset=SetOffset(value, coord),
-                           radius=radius, angle=angle, charge=charge, E=E, DE=DE, length=length,
-                           yml_path=yml_path, templatefilename=templatefilename, templatefolder=templatefolder,
-                           getEnergyHist=getEnergyHist, printPtarmigan=printPtarmigan,
-                           removeYmlFile=removeYmlFile, removeH5File=removeH5File, mpi=mpi, mpi_nb=mpi_nb)
     picklefilename = (yml_path + tag + '_' + coord + '_n_' + str(ngenerate) + '_npoints_' + str(npoints) + '_sigma_{:.1e}'.format(sigma))
     WritePicke(data_dict, picklefilename)
+        GenerateRunAnalyse(data_dict, tag=fulltag, seed=seed, ngenerate=ngenerate, offset=SetOffset(position, coord),
+                           yml_path=yml_path, removeYmlFile=removeYmlFile, removeH5File=removeH5File, **arg)
     _printProgressBar(npoints, npoints, prefix='Run position jitter scan : {}'.format(printtag), suffix='Complete', length=50)
 
 
-def ScanAngleJitter(tag="luxe_default_angle_jitter_scan", ngenerate=10000, mu=-17.2, sigma=6e-5, npoints=100,
-                    radius=5e-6, offset=[0.0, 0.0, 0.0], charge=250e-12, E=16.5e9, DE=16.5e6, length=24e-6,
-                    yml_path=yml_default_path, templatefilename=template_default_file_name, templatefolder=template_default_path,
-                    getEnergyHist=False, printPtarmigan=False, removeYmlFile=False, removeH5File=False, mpi=False, mpi_nb=8):
+def ScanAngleJitter(tag="luxe_default_angle_jitter_scan", ngenerate=10000, mu=-17.2, sigma=6e-5, npoints=1000,
+                    yml_path=yml_default_path, removeYmlFile=True, removeH5File=True, **arg):
     data_dict = {}
     printtag = tag + '_' + str(ngenerate)
     for seed in range(npoints):
         fulltag = str(seed).zfill(3) + '_' + tag + '_' + str(ngenerate)
         angle = _np.random.normal(mu, sigma)
         _printProgressBar(seed, npoints, prefix='Run angle jitter scan : {}'.format(printtag), suffix='Complete', length=50)
-        GenerateRunAnalyse(data_dict, tag=fulltag, seed=seed, ngenerate=ngenerate, offset=offset,
-                           radius=radius, angle=angle, charge=charge, E=E, DE=DE, length=length,
-                           yml_path=yml_path, templatefilename=templatefilename, templatefolder=templatefolder,
-                           getEnergyHist=getEnergyHist, printPtarmigan=printPtarmigan,
-                           removeYmlFile=removeYmlFile, removeH5File=removeH5File, mpi=mpi, mpi_nb=mpi_nb)
     picklefilename = (yml_path + tag + '_n_' + str(ngenerate) + '_npoints_' + str(npoints) + '_sigma_{:.1e}'.format(sigma))
     WritePicke(data_dict, picklefilename)
+        GenerateRunAnalyse(data_dict, tag=fulltag, seed=seed, ngenerate=ngenerate, angle=angle,
+                           yml_path=yml_path, removeYmlFile=removeYmlFile, removeH5File=removeH5File, **arg)
     _printProgressBar(npoints, npoints, prefix='Run angle jitter scan : {}'.format(printtag), suffix='Complete', length=50)
 
 
-def ScanEnergyJitter(tag="luxe_default_energy_jitter_scan", ngenerate=10000, mu=0, sigma=1e-6, npoints=100,
-                     yml_path=yml_default_path, templatefilename=template_default_file_name, templatefolder=template_default_path,
-                     getEnergyHist=False, printPtarmigan=False, removeYmlFile=False, removeH5File=False, mpi=False, mpi_nb=8):
+def ScanEnergyJitter(tag="luxe_default_energy_jitter_scan", ngenerate=10000, mu=16.5e9, sigma=1e6, npoints=1000,
+                     yml_path=yml_default_path, removeYmlFile=True, removeH5File=True, **arg):
     data_dict = {}
     printtag = tag + '_' + str(ngenerate)
     for seed in range(npoints):
@@ -121,17 +103,14 @@ def ScanEnergyJitter(tag="luxe_default_energy_jitter_scan", ngenerate=10000, mu=
         energy = _np.random.normal(mu, sigma)
         _printProgressBar(seed, npoints, prefix='Run energy jitter scan : {}'.format(printtag), suffix='Complete', length=50)
         GenerateRunAnalyse(data_dict, tag=fulltag, seed=seed, ngenerate=ngenerate, E=energy,
-                           yml_path=yml_path, templatefilename=templatefilename, templatefolder=templatefolder,
-                           getEnergyHist=getEnergyHist, printPtarmigan=printPtarmigan,
-                           removeYmlFile=removeYmlFile, removeH5File=removeH5File, mpi=mpi, mpi_nb=mpi_nb)
     picklefilename = (yml_path + tag + '_n_' + str(ngenerate) + '_npoints_' + str(npoints) + '_sigma_{:.1e}'.format(sigma))
     WritePicke(data_dict, picklefilename)
+                           yml_path=yml_path, removeYmlFile=removeYmlFile, removeH5File=removeH5File, **arg)
     _printProgressBar(npoints, npoints, prefix='Run energy jitter scan : {}'.format(printtag), suffix='Complete', length=50)
 
 
-def ScanChargeJitter(tag="luxe_default_charge_jitter_scan", ngenerate=10000, mu=250e-12, sigma=1e-12, npoints=100,
-                     yml_path=yml_default_path, templatefilename=template_default_file_name, templatefolder=template_default_path,
-                     getEnergyHist=False, printPtarmigan=False, removeYmlFile=False, removeH5File=False, mpi=False, mpi_nb=8):
+def ScanChargeJitter(tag="luxe_default_charge_jitter_scan", ngenerate=10000, mu=250e-12, sigma=1e-12, npoints=1000,
+                     yml_path=yml_default_path, removeYmlFile=True, removeH5File=True, **arg):
     data_dict = {}
     printtag = tag + '_' + str(ngenerate)
     for seed in range(npoints):
@@ -139,17 +118,14 @@ def ScanChargeJitter(tag="luxe_default_charge_jitter_scan", ngenerate=10000, mu=
         charge = _np.random.normal(mu, sigma)
         _printProgressBar(seed, npoints, prefix='Run charge jitter scan : {}'.format(printtag), suffix='Complete', length=50)
         GenerateRunAnalyse(data_dict, tag=fulltag, seed=seed, ngenerate=ngenerate, charge=charge,
-                           yml_path=yml_path, templatefilename=templatefilename, templatefolder=templatefolder,
-                           getEnergyHist=getEnergyHist, printPtarmigan=printPtarmigan,
-                           removeYmlFile=removeYmlFile, removeH5File=removeH5File, mpi=mpi, mpi_nb=mpi_nb)
     picklefilename = (yml_path + tag + '_n_' + str(ngenerate) + '_npoints_' + str(npoints) + '_sigma_{:.1e}'.format(sigma))
     WritePicke(data_dict, picklefilename)
+                           yml_path=yml_path, removeYmlFile=removeYmlFile, removeH5File=removeH5File, **arg)
     _printProgressBar(npoints, npoints, prefix='Run charge jitter scan : {}'.format(printtag), suffix='Complete', length=50)
 
 
-def ScanLengthJitter(tag="luxe_default_length_jitter_scan", ngenerate=10000, mu=40e-15, sigma=3e-15, npoints=100,
-                     yml_path=yml_default_path, templatefilename=template_default_file_name, templatefolder=template_default_path,
-                     getEnergyHist=False, printPtarmigan=False, removeYmlFile=False, removeH5File=False, mpi=False, mpi_nb=8):
+def ScanLengthJitter(tag="luxe_default_length_jitter_scan", ngenerate=10000, mu=12e-6, sigma=0.9e-6, npoints=1000,
+                     yml_path=yml_default_path, removeYmlFile=True, removeH5File=True, **arg):
     data_dict = {}
     printtag = tag + '_' + str(ngenerate)
     for seed in range(npoints):
@@ -157,17 +133,14 @@ def ScanLengthJitter(tag="luxe_default_length_jitter_scan", ngenerate=10000, mu=
         length = _np.random.normal(mu, sigma)
         _printProgressBar(seed, npoints, prefix='Run length jitter scan : {}'.format(printtag), suffix='Complete', length=50)
         GenerateRunAnalyse(data_dict, tag=fulltag, seed=seed, ngenerate=ngenerate, length=length,
-                           yml_path=yml_path, templatefilename=templatefilename, templatefolder=templatefolder,
-                           getEnergyHist=getEnergyHist, printPtarmigan=printPtarmigan,
-                           removeYmlFile=removeYmlFile, removeH5File=removeH5File, mpi=mpi, mpi_nb=mpi_nb)
     picklefilename = (yml_path + tag + '_n_' + str(ngenerate) + '_npoints_' + str(npoints) + '_sigma_{:.1e}'.format(sigma))
     WritePicke(data_dict, picklefilename)
+                           yml_path=yml_path, removeYmlFile=removeYmlFile, removeH5File=removeH5File, **arg)
     _printProgressBar(npoints, npoints, prefix='Run length jitter scan : {}'.format(printtag), suffix='Complete', length=50)
 
 
-def ScanSizeJitter(tag="luxe_default_size_jitter_scan", ngenerate=10000, mu=5e-6, sigma=1e-6, npoints=100,
-                   yml_path=yml_default_path, templatefilename=template_default_file_name, templatefolder=template_default_path,
-                   getEnergyHist=False, printPtarmigan=False, removeYmlFile=False, removeH5File=False, mpi=False, mpi_nb=8):
+def ScanSizeJitter(tag="luxe_default_size_jitter_scan", ngenerate=10000, mu=5e-6, sigma=1e-6, npoints=1000,
+                   yml_path=yml_default_path, removeYmlFile=True, removeH5File=True, **arg):
     data_dict = {}
     printtag = tag + '_' + str(ngenerate)
     for seed in range(npoints):
@@ -175,46 +148,39 @@ def ScanSizeJitter(tag="luxe_default_size_jitter_scan", ngenerate=10000, mu=5e-6
         size = _np.random.normal(mu, sigma)
         _printProgressBar(seed, npoints, prefix='Run size jitter scan : {}'.format(printtag), suffix='Complete', length=50)
         GenerateRunAnalyse(data_dict, tag=fulltag, seed=seed, ngenerate=ngenerate, radius=size,
-                           yml_path=yml_path, templatefilename=templatefilename, templatefolder=templatefolder,
-                           getEnergyHist=getEnergyHist, printPtarmigan=printPtarmigan,
-                           removeYmlFile=removeYmlFile, removeH5File=removeH5File, mpi=mpi, mpi_nb=mpi_nb)
     picklefilename = (yml_path + tag + '_n_' + str(ngenerate) + '_npoints_' + str(npoints) + '_sigma_{:.1e}'.format(sigma))
     WritePicke(data_dict, picklefilename)
+                           yml_path=yml_path, removeYmlFile=removeYmlFile, removeH5File=removeH5File, **arg)
     _printProgressBar(npoints, npoints, prefix='Run size jitter scan : {}'.format(printtag), suffix='Complete', length=50)
 
 
 def ScanPositionOffset(tag="luxe_default_position_offset_scan", seed=0, ngenerate=10000, coord='X', offset_list=[],
-                       radius=5e-6, angle=-17.2,
-                       yml_path=yml_default_path, templatefilename=template_default_file_name, templatefolder=template_default_path,
-                       printPtarmigan=False, removeYmlFile=False, removeH5File=False, mpi=False, mpi_nb=8):
+                       yml_path=yml_default_path, removeYmlFile=True, removeH5File=True, **arg):
     data_dict = {}
     noffset = len(offset_list)
     printtag = tag + '_' + coord + '_' + str(ngenerate)
     for i, offset in enumerate(offset_list):
         fulltag = str(seed).zfill(3) + '_' + tag + '_' + coord + '_' + str(offset) + '_' + str(ngenerate)
         _printProgressBar(i, noffset, prefix='Run position offset scan : {}'.format(printtag), suffix='Complete', length=50)
-        GenerateRunAnalyse(data_dict, tag=fulltag, seed=seed, ngenerate=ngenerate, offset=SetOffset(offset, coord), radius=radius, angle=angle,
-                           yml_path=yml_path, templatefilename=templatefilename, templatefolder=templatefolder,
-                           printPtarmigan=printPtarmigan, removeYmlFile=removeYmlFile, removeH5File=removeH5File, mpi=mpi, mpi_nb=mpi_nb)
         picklefilename = (yml_path + str(seed).zfill(3) + '_' + tag + '_' + coord + '_n_' + str(ngenerate))
         WritePicke(data_dict, picklefilename)
+        GenerateRunAnalyse(data_dict, tag=fulltag, seed=seed, ngenerate=ngenerate, offset=SetOffset(offset, coord),
+                           yml_path=yml_path, removeYmlFile=removeYmlFile, removeH5File=removeH5File, **arg)
     _printProgressBar(noffset, noffset, prefix='Run position offset scan : {}'.format(printtag), suffix='Complete', length=50)
 
 
-def ScanRadiusOffset(tag="luxe_default_radius_offset_scan", seed=0, ngenerate=10000, radius_list=[], offset=[0.0, 0.0, 0.0],
-                     yml_path=yml_default_path, templatefilename=template_default_file_name, templatefolder=template_default_path,
-                     printPtarmigan=False, removeYmlFile=False, removeH5File=False, mpi=False, mpi_nb=8):
+def ScanRadiusOffset(tag="luxe_default_radius_offset_scan", seed=0, ngenerate=10000, radius_list=[],
+                     yml_path=yml_default_path, removeYmlFile=True, removeH5File=True, **arg):
     data_dict = {}
     nradius = len(radius_list)
     printtag = tag + '_' + str(ngenerate)
     for i, radius in enumerate(radius_list):
         fulltag = str(seed).zfill(3) + '_' + tag + '_' + str(radius) + '_' + str(ngenerate)
         _printProgressBar(i, nradius, prefix='Run radius offset scan : {}'.format(printtag), suffix='Complete', length=50)
-        GenerateRunAnalyse(data_dict, tag=fulltag, seed=seed, ngenerate=ngenerate, offset=offset, radius=radius,
-                           yml_path=yml_path, templatefilename=templatefilename, templatefolder=templatefolder,
-                           printPtarmigan=printPtarmigan, removeYmlFile=removeYmlFile, removeH5File=removeH5File, mpi=mpi, mpi_nb=mpi_nb)
         picklefilename = (yml_path + str(seed).zfill(3) + '_' + tag + '_n_' + str(ngenerate))
         WritePicke(data_dict, picklefilename)
+        GenerateRunAnalyse(data_dict, tag=fulltag, seed=seed, ngenerate=ngenerate, radius=radius,
+                           yml_path=yml_path, removeYmlFile=removeYmlFile, removeH5File=removeH5File, **arg)
     _printProgressBar(nradius, nradius, prefix='Run radius offset scan : {}'.format(printtag), suffix='Complete', length=50)
 
 # ============ ANALYSE FILES ================ #
