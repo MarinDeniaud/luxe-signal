@@ -605,17 +605,17 @@ def fitJitter(func, Var_BPM, Var_IP, fitparam=[]):
     a_fit, c_fit = params
     x_fit = _np.linspace(min(Var_BPM), max(Var_BPM), 100)
     y_fit = func(x_fit, a_fit, c_fit)
-    return x_fit, y_fit
+    return x_fit, y_fit, a_fit, c_fit
 
 
-def plotXYResolutionOnResolution(regex_x, regex_y, part='photon', nbins=30, value=0.68, figsize=[8, 5], fitparam=[1e10, 1]):
+def plotXYResolutionOnResolution(regex_x, regex_y=None, labelX="X", labelY="Y", labelXY="X/Y", unit="m",
+                                 part='photon', nbins=30, value=0.68,
+                                 fit=False, fitparam=[1e10, 1], mark_x=None, mark_y=None):
     filenames_x = _glob.glob(regex_x)
-    filenames_y = _glob.glob(regex_y)
     if not filenames_x:
         raise IOError("No files found with regex")
 
     Var_BPM_X, Var_IP_X = getSignalJitterArray(filenames_x, part=part, nbins=nbins, value=value)
-    Var_BPM_Y, Var_IP_Y = getSignalJitterArray(filenames_y, part=part, nbins=nbins, value=value)
 
     def hyper(x, a, c):
         return _np.sqrt(pow(a, 2) * pow(x, 2) + pow(c, 2))
@@ -623,20 +623,27 @@ def plotXYResolutionOnResolution(regex_x, regex_y, part='photon', nbins=30, valu
     def poly(x, a, c):
         return a * pow(x, 2) + c
 
-    _plt.rcParams['font.size'] = 15
-    _plt.figure(figsize=figsize)
+    if fit:
+        JitterX_fit_x, JitterX_fit_y, JitterX_fit_a, JitterX_fit_c = fitJitter(poly, Var_BPM_X, Var_IP_X, fitparam=fitparam)
+        _plt.plot(JitterX_fit_x, JitterX_fit_y, label="fit", color='C0')
+        if mark_x is not None:
+            _plt.axvline(mark_x, ls='--', color='C0', alpha=0.5)
+            _plt.axhline(poly(mark_x, JitterX_fit_a, JitterX_fit_c), ls=':', color='C0', alpha=0.5)
+    _plt.plot(Var_BPM_X, Var_IP_X, ls='', marker='+', markersize=12, color='C0', label='data {}'.format(labelX))
 
-    JitterX_fit_x, JitterX_fit_y = fitJitter(poly, Var_BPM_X, Var_IP_X, fitparam=fitparam)
-    _plt.plot(JitterX_fit_x, JitterX_fit_y, label="Polynomial fit", color='C0')
+    if regex_y is not None:
+        filenames_y = _glob.glob(regex_y)
+        Var_BPM_Y, Var_IP_Y = getSignalJitterArray(filenames_y, part=part, nbins=nbins, value=value)
+        if fit:
+            JitterY_fit_x, JitterY_fit_y, JitterY_fit_a, JitterY_fit_c = fitJitter(poly, Var_BPM_Y, Var_IP_Y, fitparam=fitparam)
+            _plt.plot(JitterY_fit_x, JitterY_fit_y, label="fit", color='C1')
+            if mark_y is not None:
+                _plt.axvline(mark_y, ls='--', color='C1', alpha=0.5)
+                _plt.axhline(poly(mark_y, JitterY_fit_a, JitterY_fit_c), ls=':', color='C1', alpha=0.5)
+        _plt.plot(Var_BPM_Y, Var_IP_Y, ls='', marker='x', markersize=12, color='C1', label='data {}'.format(labelY))
 
-    JitterY_fit_x, JitterY_fit_y = fitJitter(poly, Var_BPM_Y, Var_IP_Y, fitparam=fitparam)
-    _plt.plot(JitterY_fit_x, JitterY_fit_y, label="Polynomial fit", color='C1')
-
-    _plt.plot(Var_BPM_X, Var_IP_X, ls='', marker='+', markersize=12, color='C0', label='X')
-    _plt.plot(Var_BPM_Y, Var_IP_Y, ls='', marker='+', markersize=12, color='C1', label='Y')
-
-    _plt.ylabel(r"$\sigma_{Photons}$ [%]")
-    _plt.xlabel(r"$\sigma_{Jitter}$ [m]")
+    _plt.ylabel(r"$\sigma_{{{part}}}$ [%]".format(part=part))
+    _plt.xlabel(r"$\sigma_{{J, {param}}}$ [{unit}]".format(param=labelXY, unit=unit))
     _plt.ticklabel_format(axis="x", style='sci', scilimits=(0, 0))
     _plt.legend()
 
