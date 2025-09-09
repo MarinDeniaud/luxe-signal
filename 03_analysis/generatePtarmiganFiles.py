@@ -364,8 +364,10 @@ def calcCumulativeLength(data, nbins=30, value=0.68):
     mode = calcPercentile(Npart, cumsum, 0.5)
     return upper_cl, lower_cl, mode
 
+
 def calcVariation(upper_cl, lower_cl, mode):
     return _np.abs(upper_cl - lower_cl) / mode * 100
+    # return _np.abs(upper_cl - lower_cl)
 
 # ============ WRITE/READ ================ #
 
@@ -642,7 +644,7 @@ def plotXYResolutionOnResolution(regex_x, regex_y=None, labelX="X", labelY="Y", 
                 _plt.axhline(poly(mark_y, JitterY_fit_a, JitterY_fit_c), ls=':', color='C1', alpha=0.5)
         _plt.plot(Var_BPM_Y, Var_IP_Y, ls='', marker='x', markersize=12, color='C1', label='data {}'.format(labelY))
 
-    _plt.ylabel(r"$\sigma_{{{part}}}$ [%]".format(part=part))
+    _plt.ylabel(r"$\Sigma_{{{part}}}$ [%]".format(part=part))
     _plt.xlabel(r"$\sigma_{{J, {param}}}$ [{unit}]".format(param=labelXY, unit=unit))
     _plt.ticklabel_format(axis="x", style='sci', scilimits=(0, 0))
     _plt.legend()
