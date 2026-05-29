@@ -1,6 +1,7 @@
-
 00_ptarmigan/pickles/*.pickle
 00_ptarmigan/pickles_V1/*.pickle
 00_ptarmigan/pickles_V2/*.pickle
 03_analysis/jupyter_notebooks/.ipynb_checkpoints
 03_analysis/jupyter_notebooks/plots/*
+
+*checkpoint.ipynb
